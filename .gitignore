@@ -1,0 +1,40 @@
+# Ignorer les dépendances Node.js
+node_modules/
+
+# Ignorer les fichiers de logs
+*.log
+logs/
+
+# Ignorer les fichiers d'environnement
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Ignorer les fichiers de configuration IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Ignorer les fichiers de build
+dist/
+build/
+out/
+
+# Ignorer les fichiers temporaires
+tmp/
+temp/
+
+# Ignorer les fichiers de cache
+.cache/
+.yarn/
+.yarnrc
+
+# Ignorer les fichiers système
+.DS_Store
+Thumbs.db
