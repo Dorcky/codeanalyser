@@ -11,7 +11,7 @@ const officegen = require('officegen');
 const officeparser = require('officeparser');
 
 const app = express();
-const port = 3004;
+const port = 3000;
 const upload = multer({ dest: 'uploads/' });
 
 app.use(express.json());

@@ -153,7 +153,7 @@
         let formData = new FormData();
         formData.append("file", fileInput.files[0]);
 
-        fetch("http://localhost:3004/upload", {
+        fetch("http://localhost:3000/upload", {
             method: "POST",
             body: formData
         })
@@ -206,7 +206,7 @@
         document.getElementById("editSpinner").style.display = "inline-block";
         document.getElementById("editStatus").innerText = "🔄 Modification en cours...";
 
-        fetch("http://localhost:3004/edit-file", {
+        fetch("http://localhost:3000/edit-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: currentFilename, instructions })
@@ -234,7 +234,7 @@
 
     // 📂 Charger la liste des fichiers
     function loadFiles() {
-        fetch("http://localhost:3004/files")
+        fetch("http://localhost:3000/files")
         .then(response => response.json())
         .then(files => {
             const fileList = document.getElementById("fileList");
@@ -273,7 +273,7 @@
     function viewFile(filename) {
         document.getElementById("filePreview").innerText = "Chargement de l'aperçu...";
         
-        fetch(`http://localhost:3004/file-content/${filename}`)
+        fetch(`http://localhost:3000/file-content/${filename}`)
         .then(response => response.json())
         .then(data => {
             const filePreview = document.getElementById("filePreview");
@@ -292,13 +292,13 @@
 
     // 📥 Télécharger un fichier
     function downloadFile(filename) {
-        window.location.href = `http://localhost:3004/download/${filename}`;
+        window.location.href = `http://localhost:3000/download/${filename}`;
     }
 
     // 🗑 Supprimer un fichier
     function deleteFile(filename) {
         if (confirm("Êtes-vous sûr de vouloir supprimer ce fichier ?")) {
-            fetch(`http://localhost:3004/delete/${filename}`, {
+            fetch(`http://localhost:3000/delete/${filename}`, {
                 method: "DELETE"
             })
             .then(response => response.json())
