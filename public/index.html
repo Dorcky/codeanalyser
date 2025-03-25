@@ -112,6 +112,21 @@
     let currentFilename = "";
     let currentFileType = "";
 
+    // Initialiser au chargement de la page
+    window.onload = function() {
+        // Récupérer les valeurs stockées
+        currentFilename = localStorage.getItem('currentFilename') || "";
+        currentFileType = localStorage.getItem('currentFileType') || "";
+        
+        // Charger les fichiers
+        loadFiles();
+        
+        // Afficher l'aperçu du fichier courant s'il existe
+        if (currentFilename) {
+            viewFile(currentFilename);
+        }
+    };
+
     // Récupérer l'icône en fonction du type de fichier
     function getFileTypeIcon(fileType, originalname) {
         switch(fileType) {
@@ -153,7 +168,7 @@
         let formData = new FormData();
         formData.append("file", fileInput.files[0]);
 
-        fetch("http://localhost:3000/upload", {
+        fetch("http://localhost:3020/upload", {
             method: "POST",
             body: formData
         })
@@ -163,8 +178,13 @@
             document.getElementById("uploadSpinner").style.display = "none";
             
             if (data.filename) {
+                // Mettre à jour et sauvegarder le nom du fichier
                 currentFilename = data.filename;
                 currentFileType = data.fileType;
+                
+                // Stockage local pour plus de sécurité
+                localStorage.setItem('currentFilename', currentFilename);
+                localStorage.setItem('currentFileType', currentFileType);
                 
                 let statusMessage = "✅ Fichier téléversé avec succès !";
                 if (data.fileType === 'unsupported') {
@@ -173,6 +193,9 @@
                 
                 document.getElementById("uploadStatus").innerText = statusMessage;
                 loadFiles();
+                
+                // Mettre à jour immédiatement l'aperçu du fichier
+                viewFile(data.filename);
             } else {
                 alert("Erreur lors de l'upload : " + (data.error || "Erreur inconnue"));
             }
@@ -186,6 +209,12 @@
 
     // ✍️ Modifier le fichier avec l'IA
     function editFile() {
+        // Essayer de récupérer depuis le stockage local si la variable est vide
+        if (!currentFilename) {
+            currentFilename = localStorage.getItem('currentFilename');
+            currentFileType = localStorage.getItem('currentFileType');
+        }
+
         if (!currentFilename) {
             alert("Veuillez d'abord téléverser un fichier !");
             return;
@@ -206,7 +235,7 @@
         document.getElementById("editSpinner").style.display = "inline-block";
         document.getElementById("editStatus").innerText = "🔄 Modification en cours...";
 
-        fetch("http://localhost:3000/edit-file", {
+        fetch("http://localhost:3020/edit-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: currentFilename, instructions })
@@ -219,6 +248,8 @@
             if (data.editedFilename) {
                 document.getElementById("editStatus").innerText = "✅ Modification réussie !";
                 currentFilename = data.editedFilename;
+                // Mettre à jour le stockage local
+                localStorage.setItem('currentFilename', currentFilename);
                 loadFiles();
                 viewFile(data.editedFilename);
             } else {
@@ -234,7 +265,7 @@
 
     // 📂 Charger la liste des fichiers
     function loadFiles() {
-        fetch("http://localhost:3000/files")
+        fetch("http://localhost:3020/files")
         .then(response => response.json())
         .then(files => {
             const fileList = document.getElementById("fileList");
@@ -273,7 +304,7 @@
     function viewFile(filename) {
         document.getElementById("filePreview").innerText = "Chargement de l'aperçu...";
         
-        fetch(`http://localhost:3000/file-content/${filename}`)
+        fetch(`http://localhost:3020/file-content/${filename}`)
         .then(response => response.json())
         .then(data => {
             const filePreview = document.getElementById("filePreview");
@@ -292,13 +323,13 @@
 
     // 📥 Télécharger un fichier
     function downloadFile(filename) {
-        window.location.href = `http://localhost:3000/download/${filename}`;
+        window.location.href = `http://localhost:3020/download/${filename}`;
     }
 
     // 🗑 Supprimer un fichier
     function deleteFile(filename) {
         if (confirm("Êtes-vous sûr de vouloir supprimer ce fichier ?")) {
-            fetch(`http://localhost:3000/delete/${filename}`, {
+            fetch(`http://localhost:3020/delete/${filename}`, {
                 method: "DELETE"
             })
             .then(response => response.json())
@@ -331,9 +362,6 @@
             alert("Aucun contenu à copier.");
         }
     }
-
-    // Charger les fichiers au démarrage
-    loadFiles();
 </script>
 
 </body>

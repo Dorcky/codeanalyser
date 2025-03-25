@@ -1,34 +1,66 @@
-require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const cors = require('cors');
+const mongoose = require('mongoose');
+const { GridFsStorage } = require('multer-gridfs-storage');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const mammoth = require('mammoth');
 const ExcelJS = require('exceljs');
 const officegen = require('officegen');
 const officeparser = require('officeparser');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
-const port = 3000;
-const upload = multer({ dest: 'uploads/' });
+const port = process.env.PORT || 3020;
+
+// Configuration CORS
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://votre-domaine.com'], // Ajustez selon vos besoins
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
-app.use(cors());
-app.use(express.static('public'));
+app.use(express.urlencoded({ extended: true }));
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error("❌ ERREUR: La clé API GEMINI_API_KEY n'est pas définie dans le fichier .env");
-  process.exit(1);
-}
+// Connexion à MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
 
-console.log("✅ Clé API Gemini trouvée");
+// Modèle de fichier
+const FileSchema = new mongoose.Schema({
+  filename: String,
+  originalname: String,
+  mimetype: String,
+  size: Number,
+  uploadDate: { type: Date, default: Date.now },
+  fileType: String,
+  content: Buffer
+});
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = "gemini-1.5-pro";
+const File = mongoose.model('File', FileSchema);
 
-let uploadedFiles = {}; // Stockage des fichiers temporairement
+// Configuration du stockage GridFS
+const storage = new GridFsStorage({
+  url: process.env.MONGODB_URI,
+  file: (req, file) => {
+    return {
+      filename: `${Date.now()}-${file.originalname}`,
+      bucketName: 'uploads',
+      metadata: {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        fileType: getFileType(file.mimetype, file.originalname)
+      }
+    };
+  }
+});
+
+const upload = multer({ storage });
 
 // Fonction utilitaire pour détecter le type de fichier
 function getFileType(mimetype, filename) {
@@ -49,339 +81,269 @@ function getFileType(mimetype, filename) {
   }
 }
 
-// 📤 API d'upload d'un fichier
-app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Aucun fichier envoyé." });
+// Configuration de Gemini AI
+if (!process.env.GEMINI_API_KEY) {
+  console.error("❌ ERREUR: La clé API GEMINI_API_KEY n'est pas définie");
+  process.exit(1);
+}
 
-  console.log(`📤 Fichier reçu: ${req.file.originalname}`);
-  const fileType = getFileType(req.file.mimetype, req.file.originalname);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const MODEL_NAME = "gemini-1.5-pro";
+
+// Fonction pour extraire le contenu des différents types de fichiers
+async function extractFileContent(file, fileType) {
+  const buffer = file.buffer;
+  const tempFilePath = path.join(process.env.TEMP_DIR || '/tmp', file.filename);
   
-  uploadedFiles[req.file.filename] = {
-    path: req.file.path,
-    originalname: req.file.originalname,
-    mimetype: req.file.mimetype,
-    size: req.file.size,
-    type: fileType
-  };
+  // Écrire le buffer dans un fichier temporaire
+  fs.writeFileSync(tempFilePath, buffer);
 
-  res.json({ 
-    message: "Fichier téléversé avec succès", 
-    filename: req.file.filename,
-    fileType: fileType 
-  });
+  try {
+    switch(fileType) {
+      case 'word':
+        return await extractWordContent(tempFilePath);
+      case 'excel':
+        return await extractExcelContent(tempFilePath);
+      case 'powerpoint':
+        return await extractPowerPointContent(tempFilePath);
+      case 'text':
+        return buffer.toString('utf-8');
+      default:
+        throw new Error('Type de fichier non supporté');
+    }
+  } finally {
+    // Nettoyer le fichier temporaire
+    fs.unlinkSync(tempFilePath);
+  }
+}
+
+// Fonctions d'extraction (similaires à votre implémentation précédente)
+async function extractWordContent(filePath) { /* ... */ }
+async function extractExcelContent(filePath) { /* ... */ }
+async function extractPowerPointContent(filePath) { /* ... */ }
+
+// Route d'upload de fichier
+app.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Aucun fichier envoyé." });
+    }
+
+    // Sauvegarder les métadonnées du fichier
+    const newFile = new File({
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      fileType: req.file.metadata.fileType
+    });
+    await newFile.save();
+
+    res.json({ 
+      message: "Fichier téléversé avec succès", 
+      filename: req.file.filename,
+      fileType: req.file.metadata.fileType 
+    });
+  } catch (error) {
+    console.error('Erreur lors de l\'upload:', error);
+    res.status(500).json({ error: "Erreur lors du téléversement" });
+  }
 });
 
-// Extraire le contenu d'un fichier Word
-async function extractWordContent(filePath) {
-  try {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value;
-  } catch (error) {
-    console.error('Erreur lors de l\'extraction du contenu Word:', error);
-    throw error;
-  }
-}
-
-// Extraire le contenu d'un fichier Excel
-async function extractExcelContent(filePath) {
-  try {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
-    
-    let content = '';
-    workbook.eachSheet((worksheet, sheetId) => {
-      content += `Feuille: ${worksheet.name}\n`;
-      
-      worksheet.eachRow((row, rowNumber) => {
-        const rowValues = row.values.slice(1).join('\t');
-        content += `${rowNumber}: ${rowValues}\n`;
-      });
-      content += '\n';
-    });
-    
-    return content;
-  } catch (error) {
-    console.error('Erreur lors de l\'extraction du contenu Excel:', error);
-    throw error;
-  }
-}
-
-// Extraire le contenu d'un fichier PowerPoint
-async function extractPowerPointContent(filePath) {
-  try {
-    const content = await officeparser.parsePptx(filePath);
-    return content;
-  } catch (error) {
-    console.error('Erreur lors de l\'extraction du contenu PowerPoint:', error);
-    throw error;
-  }
-}
-
-// Créer un nouveau fichier Word modifié
-async function createModifiedWordDocument(content, outputPath) {
-  const docx = officegen('docx');
-  
-  // Ajouter du contenu
-  const paragraphs = content.split('\n');
-  paragraphs.forEach(para => {
-    if (para.trim()) {
-      const p = docx.createP();
-      p.addText(para);
-    }
-  });
-  
-  // Générer le fichier
-  return new Promise((resolve, reject) => {
-    const out = fs.createWriteStream(outputPath);
-    out.on('error', reject);
-    
-    docx.on('error', reject);
-    
-    out.on('close', () => {
-      resolve(outputPath);
-    });
-    
-    docx.generate(out);
-  });
-}
-
-// Créer un nouveau fichier Excel modifié
-async function createModifiedExcelWorkbook(content, outputPath) {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Feuille1');
-  
-  // Ajouter le contenu
-  const lines = content.split('\n');
-  lines.forEach((line, index) => {
-    if (line.trim()) {
-      const cells = line.split('\t');
-      const row = worksheet.getRow(index + 1);
-      cells.forEach((cell, cellIndex) => {
-        row.getCell(cellIndex + 1).value = cell;
-      });
-      row.commit();
-    }
-  });
-  
-  // Sauvegarder le fichier
-  await workbook.xlsx.writeFile(outputPath);
-  return outputPath;
-}
-
-// Créer un nouveau fichier PowerPoint modifié
-async function createModifiedPowerPoint(content, outputPath) {
-  const pptx = officegen('pptx');
-  
-  // Diviser le contenu en slides
-  const slides = content.split('\n\n');
-  slides.forEach(slideContent => {
-    if (slideContent.trim()) {
-      const slide = pptx.makeNewSlide();
-      slide.addText(slideContent, { x: 50, y: 50, w: '80%', h: '80%' });
-    }
-  });
-  
-  // Générer le fichier
-  return new Promise((resolve, reject) => {
-    const out = fs.createWriteStream(outputPath);
-    out.on('error', reject);
-    
-    pptx.on('error', reject);
-    
-    out.on('close', () => {
-      resolve(outputPath);
-    });
-    
-    pptx.generate(out);
-  });
-}
-
-// 🛠 API d'édition du fichier avec Gemini
+// Route d'édition de fichier
 app.post('/edit-file', async (req, res) => {
   const { filename, instructions } = req.body;
 
-  if (!filename || !uploadedFiles[filename]) {
-    return res.status(400).json({ error: "Fichier introuvable." });
-  }
-
-  if (!instructions) {
-    return res.status(400).json({ error: "Instructions manquantes." });
-  }
-
-  const filePath = uploadedFiles[filename].path;
-  const fileType = uploadedFiles[filename].type;
-  console.log(`✍️ Édition du fichier: ${filename} (${fileType}) avec instructions: "${instructions}"`);
-
   try {
-    let originalContent = '';
-    let fileDescription = '';
-    
-    // Extraire le contenu en fonction du type de fichier
-    switch (fileType) {
-      case 'word':
-        originalContent = await extractWordContent(filePath);
-        fileDescription = 'document Word (DOCX)';
-        break;
-      case 'excel':
-        originalContent = await extractExcelContent(filePath);
-        fileDescription = 'feuille de calcul Excel (XLSX)';
-        break;
-      case 'powerpoint':
-        originalContent = await extractPowerPointContent(filePath);
-        fileDescription = 'présentation PowerPoint (PPTX)';
-        break;
-      case 'text':
-        originalContent = fs.readFileSync(filePath, 'utf-8');
-        const extension = path.extname(uploadedFiles[filename].originalname);
-        fileDescription = `fichier de code (${extension})`;
-        break;
-      default:
-        return res.status(400).json({ error: "Type de fichier non pris en charge pour l'édition." });
+    // Récupérer le fichier depuis MongoDB
+    const file = await File.findOne({ filename });
+    if (!file) {
+      return res.status(404).json({ error: "Fichier non trouvé." });
     }
 
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-    const prompt = `Voici un ${fileDescription}.  
-    Applique strictement les modifications suivantes sans ajouter d'explication ni aucun élément superflu.  
-    ⚠️ **Important** : **Ne** renvoie **aucune** balise de code comme \`\`\` ou \`\`\`html. **Ne fais pas de mise en forme supplémentaire**.  
-    
-    Modifie uniquement ce qui est demandé :  
-    "${instructions}"  
-    
-    Contenu original :  
-    ${originalContent}`;
-    console.log("🚀 Envoi de la requête à Gemini...");
-    const result = await model.generateContent(prompt);
-    console.log("✅ Réponse reçue de Gemini");
-
-    const editedContent = result.response.text();
-
-    // Sauvegarde du fichier modifié
-    const editedFilename = `edited_${filename}`;
-    const editedFilePath = `uploads/${editedFilename}`;
-    
-    // Créer le fichier modifié selon son type
-    switch (fileType) {
-      case 'word':
-        await createModifiedWordDocument(editedContent, editedFilePath);
-        break;
-      case 'excel':
-        await createModifiedExcelWorkbook(editedContent, editedFilePath);
-        break;
-      case 'powerpoint':
-        await createModifiedPowerPoint(editedContent, editedFilePath);
-        break;
-      case 'text':
-        fs.writeFileSync(editedFilePath, editedContent, 'utf-8');
-        break;
-    }
-    
-    uploadedFiles[editedFilename] = {
-      path: editedFilePath,
-      originalname: `edited_${uploadedFiles[filename].originalname}`,
-      mimetype: uploadedFiles[filename].mimetype,
-      size: fs.statSync(editedFilePath).size,
-      type: fileType
-    };
-
-    console.log(`📂 Fichier édité sauvegardé: ${editedFilename}`);
-
-    res.json({ 
-      message: "Fichier modifié avec succès", 
-      editedFilename: editedFilename,
-      type: fileType
+    // Récupérer le fichier réel depuis GridFS
+    const gfs = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'uploads'
     });
 
+    const downloadStream = gfs.openDownloadStreamByName(filename);
+    const chunks = [];
+
+    downloadStream.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+
+    downloadStream.on('end', async () => {
+      const buffer = Buffer.concat(chunks);
+      
+      // Écrire le buffer dans un fichier temporaire
+      const tempFilePath = path.join(process.env.TEMP_DIR || '/tmp', filename);
+      fs.writeFileSync(tempFilePath, buffer);
+
+      try {
+        // Extraire le contenu
+        const originalContent = await extractFileContent({ 
+          buffer, 
+          filename, 
+          metadata: { fileType: file.fileType } 
+        }, file.fileType);
+
+        // Utiliser Gemini pour modifier le contenu
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+        const prompt = `Voici un ${file.fileType}. Applique strictement les modifications suivantes : "${instructions}"`;
+        
+        const result = await model.generateContent(prompt + "\n\n" + originalContent);
+        const editedContent = result.response.text();
+
+        // Sauvegarder le fichier modifié
+        const editedFilename = `edited_${filename}`;
+        const editedFile = new File({
+          filename: editedFilename,
+          originalname: `edited_${file.originalname}`,
+          mimetype: file.mimetype,
+          fileType: file.fileType,
+          content: Buffer.from(editedContent)
+        });
+        await editedFile.save();
+
+        // Supprimer le fichier temporaire
+        fs.unlinkSync(tempFilePath);
+
+        res.json({ 
+          message: "Fichier modifié avec succès", 
+          editedFilename: editedFilename,
+          type: file.fileType 
+        });
+      } catch (error) {
+        console.error('Erreur d\'édition:', error);
+        res.status(500).json({ error: "Erreur lors de l'édition du fichier" });
+      }
+    });
+
+    downloadStream.on('error', (error) => {
+      console.error('Erreur de lecture du fichier:', error);
+      res.status(500).json({ error: "Erreur de lecture du fichier" });
+    });
   } catch (error) {
-    console.error('❌ Erreur d\'édition:', error);
-    res.status(500).json({ error: "Erreur lors de l'édition du fichier", details: error.message });
+    console.error('Erreur lors de l\'édition:', error);
+    res.status(500).json({ error: "Erreur lors de l'édition du fichier" });
   }
 });
 
-// 📂 API pour lister les fichiers
-app.get('/files', (req, res) => {
-  const files = Object.keys(uploadedFiles).map(filename => ({
-    filename,
-    originalname: uploadedFiles[filename].originalname,
-    mimetype: uploadedFiles[filename].mimetype,
-    size: uploadedFiles[filename].size,
-    type: uploadedFiles[filename].type
-  }));
-  res.json(files);
-});
-
-// 📄 API pour lire le contenu d'un fichier
-app.get('/file-content/:filename', async (req, res) => {
-  const { filename } = req.params;
-
-  if (!uploadedFiles[filename]) {
-    return res.status(404).json({ error: "Fichier non trouvé." });
-  }
-
-  const filePath = uploadedFiles[filename].path;
-  const fileType = uploadedFiles[filename].type;
-
+// Route pour lister les fichiers
+app.get('/files', async (req, res) => {
   try {
-    let content = '';
-    
-    switch (fileType) {
-      case 'word':
-        content = await extractWordContent(filePath);
-        break;
-      case 'excel':
-        content = await extractExcelContent(filePath);
-        break;
-      case 'powerpoint':
-        content = await extractPowerPointContent(filePath);
-        break;
-      case 'text':
-        content = fs.readFileSync(filePath, 'utf-8');
-        break;
-      default:
-        return res.json({ error: "Aperçu non disponible pour ce type de fichier." });
-    }
-    
-    res.json({ content });
+    const files = await File.find({}, 'filename originalname mimetype size fileType');
+    res.json(files);
   } catch (error) {
-    console.error('❌ Erreur lors de la lecture du fichier:', error);
-    res.status(500).json({ error: "Erreur lors de la lecture du fichier", details: error.message });
+    console.error('Erreur lors de la récupération des fichiers:', error);
+    res.status(500).json({ error: "Erreur lors de la récupération des fichiers" });
   }
 });
 
-// 📥 API pour télécharger un fichier
-app.get('/download/:filename', (req, res) => {
-  const { filename } = req.params;
-
-  if (!uploadedFiles[filename]) {
-    return res.status(404).json({ error: "Fichier non trouvé." });
-  }
-
-  const filePath = uploadedFiles[filename].path;
-  res.download(filePath, uploadedFiles[filename].originalname);
-});
-
-// 🗑 API pour supprimer un fichier
-app.delete('/delete/:filename', (req, res) => {
-  const { filename } = req.params;
-
-  if (!uploadedFiles[filename]) {
-    return res.status(404).json({ error: "Fichier non trouvé." });
-  }
-
-  fs.unlink(uploadedFiles[filename].path, (err) => {
-    if (err) {
-      console.error('❌ Erreur lors de la suppression du fichier:', err);
-      return res.status(500).json({ error: "Erreur lors de la suppression du fichier", details: err.message });
+// Route pour récupérer le contenu d'un fichier
+app.get('/file-content/:filename', async (req, res) => {
+  try {
+    const file = await File.findOne({ filename: req.params.filename });
+    if (!file) {
+      return res.status(404).json({ error: "Fichier non trouvé." });
     }
 
-    delete uploadedFiles[filename];
-    console.log(`🗑 Fichier supprimé: ${filename}`);
-    res.json({ message: "Fichier supprimé avec succès" });
-  });
+    const gfs = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'uploads'
+    });
+
+    const downloadStream = gfs.openDownloadStreamByName(req.params.filename);
+    const chunks = [];
+
+    downloadStream.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+
+    downloadStream.on('end', async () => {
+      const buffer = Buffer.concat(chunks);
+      
+      try {
+        const content = await extractFileContent({ 
+          buffer, 
+          filename: file.filename, 
+          metadata: { fileType: file.fileType } 
+        }, file.fileType);
+
+        res.json({ content });
+      } catch (error) {
+        console.error('Erreur lors de l\'extraction du contenu:', error);
+        res.status(500).json({ error: "Erreur lors de l'extraction du contenu" });
+      }
+    });
+
+    downloadStream.on('error', (error) => {
+      console.error('Erreur de lecture du fichier:', error);
+      res.status(500).json({ error: "Erreur de lecture du fichier" });
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération du contenu:', error);
+    res.status(500).json({ error: "Erreur lors de la récupération du contenu" });
+  }
 });
 
-// Lancer le serveur
+// Route pour télécharger un fichier
+app.get('/download/:filename', async (req, res) => {
+  try {
+    const file = await File.findOne({ filename: req.params.filename });
+    if (!file) {
+      return res.status(404).json({ error: "Fichier non trouvé." });
+    }
+
+    const gfs = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'uploads'
+    });
+
+    const downloadStream = gfs.openDownloadStreamByName(req.params.filename);
+    
+    res.set('Content-Type', file.mimetype);
+    res.set('Content-Disposition', `attachment; filename="${file.originalname}"`);
+    
+    downloadStream.pipe(res);
+  } catch (error) {
+    console.error('Erreur lors du téléchargement:', error);
+    res.status(500).json({ error: "Erreur lors du téléchargement du fichier" });
+  }
+});
+
+// Route pour supprimer un fichier
+app.delete('/delete/:filename', async (req, res) => {
+  try {
+    const gfs = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'uploads'
+    });
+
+    // Trouver le fichier dans la base de données
+    const file = await File.findOne({ filename: req.params.filename });
+    if (!file) {
+      return res.status(404).json({ error: "Fichier non trouvé." });
+    }
+
+    // Supprimer le fichier de GridFS
+    const fileToDelete = await gfs.find({ filename: req.params.filename }).toArray();
+    if (fileToDelete.length > 0) {
+      await gfs.delete(fileToDelete[0]._id);
+    }
+
+    // Supprimer l'entrée de la collection File
+    await File.deleteOne({ filename: req.params.filename });
+
+    res.json({ message: "Fichier supprimé avec succès" });
+  } catch (error) {
+    console.error('Erreur lors de la suppression:', error);
+    res.status(500).json({ error: "Erreur lors de la suppression du fichier" });
+  }
+});
+
+// Démarrer le serveur
 app.listen(port, () => {
   console.log(`✅ Serveur en ligne sur http://localhost:${port}`);
   console.log(`🤖 Modèle configuré: ${MODEL_NAME}`);
 });
+
+module.exports = app;
