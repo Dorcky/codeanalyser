@@ -168,7 +168,7 @@
         let formData = new FormData();
         formData.append("file", fileInput.files[0]);
 
-        fetch("/api/upload", {
+        fetch("http://localhost:3020/upload", {
             method: "POST",
             body: formData
         })
@@ -235,7 +235,7 @@
         document.getElementById("editSpinner").style.display = "inline-block";
         document.getElementById("editStatus").innerText = "🔄 Modification en cours...";
 
-        fetch("/api/edit-file", {
+        fetch("http://localhost:3020/edit-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: currentFilename, instructions })
@@ -265,7 +265,7 @@
 
     // 📂 Charger la liste des fichiers
     function loadFiles() {
-        fetch("/api/files")
+        fetch("http://localhost:3020/files")
         .then(response => response.json())
         .then(files => {
             const fileList = document.getElementById("fileList");
@@ -304,7 +304,7 @@
     function viewFile(filename) {
         document.getElementById("filePreview").innerText = "Chargement de l'aperçu...";
         
-        fetch(`/api/file-content/${filename}`)
+        fetch(`http://localhost:3020/file-content/${filename}`)
         .then(response => response.json())
         .then(data => {
             const filePreview = document.getElementById("filePreview");
@@ -323,13 +323,13 @@
 
     // 📥 Télécharger un fichier
     function downloadFile(filename) {
-        window.location.href = `/api/download/${filename}`;
+        window.location.href = `http://localhost:3020/download/${filename}`;
     }
 
     // 🗑 Supprimer un fichier
     function deleteFile(filename) {
         if (confirm("Êtes-vous sûr de vouloir supprimer ce fichier ?")) {
-            fetch(`/api/delete/${filename}`, {
+            fetch(`http://localhost:3020/delete/${filename}`, {
                 method: "DELETE"
             })
             .then(response => response.json())

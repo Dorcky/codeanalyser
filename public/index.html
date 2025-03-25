@@ -56,9 +56,10 @@
 </head>
 <body>
 
+
 <div class="container">
     <h2 class="text-center mb-4">🛠 Éditeur de Fichiers IA Amélioré</h2>
-    
+   
     <!-- Support des types de fichiers -->
     <div class="alert alert-info mb-3">
         <strong>Formats supportés:</strong>
@@ -67,6 +68,7 @@
         <span class="badge bg-success mx-1">Excel (.xlsx)</span>
         <span class="badge bg-success mx-1">PowerPoint (.pptx)</span>
     </div>
+
 
     <!-- Upload de fichier -->
     <div class="mb-3">
@@ -78,7 +80,9 @@
         </button>
     </div>
 
+
     <div id="uploadStatus" class="text-center text-success fw-bold"></div>
+
 
     <!-- Instructions pour l'IA -->
     <div class="mt-4">
@@ -90,13 +94,16 @@
         </button>
     </div>
 
+
     <div id="editStatus" class="text-center text-primary fw-bold mt-3"></div>
+
 
     <!-- Liste des fichiers -->
     <div class="file-list">
         <h4>📂 Fichiers Téléversés</h4>
         <div id="fileList"></div>
     </div>
+
 
     <!-- Aperçu du fichier -->
     <div class="mt-4">
@@ -108,24 +115,27 @@
     </div>
 </div>
 
+
 <script>
     let currentFilename = "";
     let currentFileType = "";
+
 
     // Initialiser au chargement de la page
     window.onload = function() {
         // Récupérer les valeurs stockées
         currentFilename = localStorage.getItem('currentFilename') || "";
         currentFileType = localStorage.getItem('currentFileType') || "";
-        
+       
         // Charger les fichiers
         loadFiles();
-        
+       
         // Afficher l'aperçu du fichier courant s'il existe
         if (currentFilename) {
             viewFile(currentFilename);
         }
     };
+
 
     // Récupérer l'icône en fonction du type de fichier
     function getFileTypeIcon(fileType, originalname) {
@@ -153,6 +163,7 @@
         }
     }
 
+
     // 📤 Upload du fichier
     function uploadFile() {
         const fileInput = document.getElementById("fileInput");
@@ -161,14 +172,17 @@
             return;
         }
 
+
         // Afficher le spinner
         document.getElementById("uploadSpinner").style.display = "inline-block";
         document.getElementById("uploadStatus").innerText = "";
 
+
         let formData = new FormData();
         formData.append("file", fileInput.files[0]);
 
-        fetch("http://localhost:3020/upload", {
+
+        fetch("/api/upload", {
             method: "POST",
             body: formData
         })
@@ -176,24 +190,24 @@
         .then(data => {
             // Cacher le spinner
             document.getElementById("uploadSpinner").style.display = "none";
-            
+           
             if (data.filename) {
                 // Mettre à jour et sauvegarder le nom du fichier
                 currentFilename = data.filename;
                 currentFileType = data.fileType;
-                
+               
                 // Stockage local pour plus de sécurité
                 localStorage.setItem('currentFilename', currentFilename);
                 localStorage.setItem('currentFileType', currentFileType);
-                
+               
                 let statusMessage = "✅ Fichier téléversé avec succès !";
                 if (data.fileType === 'unsupported') {
                     statusMessage += " (Type non supporté pour l'édition)";
                 }
-                
+               
                 document.getElementById("uploadStatus").innerText = statusMessage;
                 loadFiles();
-                
+               
                 // Mettre à jour immédiatement l'aperçu du fichier
                 viewFile(data.filename);
             } else {
@@ -207,6 +221,7 @@
         });
     }
 
+
     // ✍️ Modifier le fichier avec l'IA
     function editFile() {
         // Essayer de récupérer depuis le stockage local si la variable est vide
@@ -215,10 +230,12 @@
             currentFileType = localStorage.getItem('currentFileType');
         }
 
+
         if (!currentFilename) {
             alert("Veuillez d'abord téléverser un fichier !");
             return;
         }
+
 
         const instructions = document.getElementById("instructions").value.trim();
         if (instructions === "") {
@@ -226,16 +243,19 @@
             return;
         }
 
+
         if (currentFileType === 'unsupported') {
             alert("Ce type de fichier n'est pas supporté pour l'édition.");
             return;
         }
 
+
         // Afficher le spinner
         document.getElementById("editSpinner").style.display = "inline-block";
         document.getElementById("editStatus").innerText = "🔄 Modification en cours...";
 
-        fetch("http://localhost:3020/edit-file", {
+
+        fetch("/api/edit-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: currentFilename, instructions })
@@ -244,7 +264,7 @@
         .then(data => {
             // Cacher le spinner
             document.getElementById("editSpinner").style.display = "none";
-            
+           
             if (data.editedFilename) {
                 document.getElementById("editStatus").innerText = "✅ Modification réussie !";
                 currentFilename = data.editedFilename;
@@ -263,24 +283,25 @@
         });
     }
 
+
     // 📂 Charger la liste des fichiers
     function loadFiles() {
-        fetch("http://localhost:3020/files")
+        fetch("/api/files")
         .then(response => response.json())
         .then(files => {
             const fileList = document.getElementById("fileList");
             fileList.innerHTML = files.map(file => {
                 const icon = getFileTypeIcon(file.type, file.originalname);
-                const supportBadge = file.type === 'unsupported' 
-                    ? '<span class="badge bg-danger support-badge">Non supporté</span>' 
+                const supportBadge = file.type === 'unsupported'
+                    ? '<span class="badge bg-danger support-badge">Non supporté</span>'
                     : '';
-                
+               
                 let downloadBtn = '';
                 // Ajouter un bouton de téléchargement pour tous les fichiers
                 downloadBtn = `<button class="btn btn-sm btn-secondary mx-1" onclick="downloadFile('${file.filename}')">
                                     <i class="bi bi-download"></i> Télécharger
                                 </button>`;
-                
+               
                 return `
                     <div class="file-item">
                         ${icon}<strong>${file.originalname}</strong> ${supportBadge}
@@ -300,11 +321,12 @@
         .catch(error => console.error("Erreur:", error));
     }
 
+
     // 👀 Afficher l'aperçu du fichier
     function viewFile(filename) {
         document.getElementById("filePreview").innerText = "Chargement de l'aperçu...";
-        
-        fetch(`http://localhost:3020/file-content/${filename}`)
+       
+        fetch(`/api/file-content/${filename}`)
         .then(response => response.json())
         .then(data => {
             const filePreview = document.getElementById("filePreview");
@@ -321,15 +343,17 @@
         });
     }
 
+
     // 📥 Télécharger un fichier
     function downloadFile(filename) {
-        window.location.href = `http://localhost:3020/download/${filename}`;
+        window.location.href = `/api/download/${filename}`;
     }
+
 
     // 🗑 Supprimer un fichier
     function deleteFile(filename) {
         if (confirm("Êtes-vous sûr de vouloir supprimer ce fichier ?")) {
-            fetch(`http://localhost:3020/delete/${filename}`, {
+            fetch(`/api/delete/${filename}`, {
                 method: "DELETE"
             })
             .then(response => response.json())
@@ -345,10 +369,12 @@
         }
     }
 
+
     // 📋 Copier le contenu de l'aperçu
     function copyContent() {
         const filePreview = document.getElementById("filePreview");
         const content = filePreview.innerText;
+
 
         if (content) {
             navigator.clipboard.writeText(content)
@@ -364,5 +390,7 @@
     }
 </script>
 
+
 </body>
 </html>
+
