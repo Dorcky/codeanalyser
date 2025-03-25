@@ -39,4 +39,5 @@ temp/
 .DS_Store
 Thumbs.db
 .vercel
-vercel
+
+vercel.json
