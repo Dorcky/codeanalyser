@@ -1,23 +1,19 @@
 {
-    "version": 2,
-    "builds": [
+  "version": 2,
+  "builds": [
       {
-        "src": "server.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "public/**",
-        "use": "@vercel/static"
+          "src": "server.js",
+          "use": "@vercel/node"
       }
-    ],
-    "routes": [
+  ],
+  "routes": [
       {
-        "src": "/api/(.*)",
-        "dest": "server.js"
-      },
-      {
-        "src": "/(.*)",
-        "dest": "public/$1"
+          "src": "/(.*)",
+          "dest": "server.js"
       }
-    ]
+  ],
+  "env": {
+      "MONGODB_URI": "mongodb+srv://Wesky2:nKXCBQ8OdUgiwQ0H@cluster0.djdt2l9.mongodb.net/codeanalyser?retryWrites=true&w=majority",
+      "GEMINI_API_KEY": "AIzaSyDhPpuilNYOSzy6wlQhx3N583qSenFYxV0"
   }
+}

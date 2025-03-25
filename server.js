@@ -17,19 +17,23 @@ const port = process.env.PORT || 3020;
 
 // Configuration CORS
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://votre-domaine.com'], // Ajustez selon vos besoins
-  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+    origin: true,  // More permissive for development
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Connexion à MongoDB
+// Add this before app.listen()
 mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log('✅ Connected to MongoDB'))
+.catch((err) => console.error('❌ MongoDB connection error:', err));
+
 
 // Modèle de fichier
 const FileSchema = new mongoose.Schema({
@@ -46,18 +50,17 @@ const File = mongoose.model('File', FileSchema);
 
 // Configuration du stockage GridFS
 const storage = new GridFsStorage({
-  url: process.env.MONGODB_URI,
-  file: (req, file) => {
-    return {
-      filename: `${Date.now()}-${file.originalname}`,
-      bucketName: 'uploads',
-      metadata: {
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        fileType: getFileType(file.mimetype, file.originalname)
-      }
-    };
-  }
+    url: process.env.MONGODB_URI,
+    file: (req, file) => {
+        return {
+            filename: `${Date.now()}-${file.originalname}`,
+            bucketName: 'uploads',
+            metadata: {
+                originalname: file.originalname,
+                mimetype: file.mimetype
+            }
+        };
+    }
 });
 
 const upload = multer({ storage });
@@ -339,6 +342,7 @@ app.delete('/delete/:filename', async (req, res) => {
     res.status(500).json({ error: "Erreur lors de la suppression du fichier" });
   }
 });
+
 
 // Démarrer le serveur
 app.listen(port, () => {
