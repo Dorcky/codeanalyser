@@ -1,1 +1,19 @@
-clear
+apres avoir effacer un projet sur github et que vous le recreez
+git remote set-url origin git@github.com:Dorcky/codeanalyser.git
+git push -u origin main
+
+
+Vérifier que tout est bien synchronisé
+git status
+
+
+Si tu veux pousser de nouveaux changements à l’avenir :
+git add .
+git commit -m "Ton message de commit"
+git push origin main
+
+ Si tu veux récupérer les dernières modifications depuis GitHub :
+ git pull origin main
+
+Si tu veux voir l’historique des commits :
+git log --oneline --graph --all
