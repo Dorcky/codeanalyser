@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "echo 'Build complet'",
+    "install": "npm install --legacy-peer-deps",
+    "build": "vercel build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
