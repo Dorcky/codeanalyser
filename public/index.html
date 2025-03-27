@@ -119,7 +119,6 @@
 <script>
     let currentFilename = "";
     let currentFileType = "";
-    const BASE_URL = window.location.origin; 
 
 
     // Initialiser au chargement de la page
@@ -167,60 +166,44 @@
 
     // 📤 Upload du fichier
     function uploadFile() {
-        const fileInput = document.getElementById("fileInput");
-        if (fileInput.files.length === 0) {
-            alert("Veuillez sélectionner un fichier !");
-            return;
-        }
-
-
-        // Afficher le spinner
-        document.getElementById("uploadSpinner").style.display = "inline-block";
-        document.getElementById("uploadStatus").innerText = "";
-
-
-        let formData = new FormData();
-        formData.append("file", fileInput.files[0]);
-
-
-        fetch(`${BASE_URL}/upload`, {
-            method: "POST",
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Cacher le spinner
-            document.getElementById("uploadSpinner").style.display = "none";
-           
-            if (data.filename) {
-                // Mettre à jour et sauvegarder le nom du fichier
-                currentFilename = data.filename;
-                currentFileType = data.fileType;
-               
-                // Stockage local pour plus de sécurité
-                localStorage.setItem('currentFilename', currentFilename);
-                localStorage.setItem('currentFileType', currentFileType);
-               
-                let statusMessage = "✅ Fichier téléversé avec succès !";
-                if (data.fileType === 'unsupported') {
-                    statusMessage += " (Type non supporté pour l'édition)";
-                }
-               
-                document.getElementById("uploadStatus").innerText = statusMessage;
-                loadFiles();
-               
-                // Mettre à jour immédiatement l'aperçu du fichier
-                viewFile(data.filename);
-            } else {
-                alert("Erreur lors de l'upload : " + (data.error || "Erreur inconnue"));
-            }
-        })
-        .catch(error => {
-            console.error("Erreur:", error);
-            document.getElementById("uploadSpinner").style.display = "none";
-            alert("Erreur de connexion au serveur");
-        });
+    const fileInput = document.getElementById("fileInput");
+    if (fileInput.files.length === 0) {
+        alert("Veuillez sélectionner un fichier !");
+        return;
     }
+
+    document.getElementById("uploadSpinner").style.display = "inline-block";
+    document.getElementById("uploadStatus").innerText = "";
+
+    let formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    fetch("/api/upload", {
+        method: "POST",
+        body: formData
+    })
+    .then(response => {
+        // Check if response is ok (status in 200-299 range)
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        document.getElementById("uploadSpinner").style.display = "none";
+        
+        if (data.filename) {
+            // Existing success logic...
+        } else {
+            throw new Error(data.error || "Unknown error");
+        }
+    })
+    .catch(error => {
+        console.error("Full error:", error);
+        document.getElementById("uploadSpinner").style.display = "none";
+        alert(`Erreur de connexion : ${error.message}`);
+    });
+}
 
 
     // ✍️ Modifier le fichier avec l'IA
@@ -256,7 +239,7 @@
         document.getElementById("editStatus").innerText = "🔄 Modification en cours...";
 
 
-        fetch(`${BASE_URL}/edit-file`, {
+        fetch("/api/edit-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: currentFilename, instructions })
@@ -287,7 +270,7 @@
 
     // 📂 Charger la liste des fichiers
     function loadFiles() {
-        fetch(`${BASE_URL}/files`)
+        fetch("/api/files")
         .then(response => response.json())
         .then(files => {
             const fileList = document.getElementById("fileList");
@@ -327,7 +310,7 @@
     function viewFile(filename) {
         document.getElementById("filePreview").innerText = "Chargement de l'aperçu...";
        
-        fetch(`${BASE_URL}/file-content/${filename}`)
+        fetch(`/api/file-content/${filename}`)
         .then(response => response.json())
         .then(data => {
             const filePreview = document.getElementById("filePreview");
@@ -347,14 +330,14 @@
 
     // 📥 Télécharger un fichier
     function downloadFile(filename) {
-        window.location.href = `${BASE_URL}/download/${filename}`;
+        window.location.href = `/api/download/${filename}`;
     }
 
 
     // 🗑 Supprimer un fichier
     function deleteFile(filename) {
         if (confirm("Êtes-vous sûr de vouloir supprimer ce fichier ?")) {
-            fetch(`${BASE_URL}/delete/${filename}`, {
+            fetch(`/api/delete/${filename}`, {
                 method: "DELETE"
             })
             .then(response => response.json())
