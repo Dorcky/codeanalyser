@@ -26,7 +26,7 @@ if (!process.env.GEMINI_API_KEY) {
 console.log("✅ Clé API Gemini trouvée");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = "gemini-1.5-pro";
+const MODEL_NAME = "gemini-1.5-flash";
 
 let uploadedFiles = {}; // Stockage des fichiers temporairement
 

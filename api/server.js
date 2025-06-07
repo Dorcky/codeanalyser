@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 app.use(cors({
-    origin: ['https://your-vercel-domain.vercel.app', 'http://localhost:3000'],
+    origin: ['https://your-vercel-domain.vercel.app', 'http://localhost:3020'],
     methods: ['GET', 'POST', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
